@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Project specific
+*.npz
+*.mp4
+*.avi
+outputs/*.jpg
+outputs/*.png
+data/calib_images/*.jpg
+data/calib_images/*.png
+data/parts/*.jpg
+data/parts/*.png
