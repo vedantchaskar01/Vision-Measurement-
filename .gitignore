@@ -1,22 +1,8 @@
 .venv/
 __pycache__/
+outputs/
+data/calib_images/
+data/parts/
+data/validation/
 *.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Project specific
-*.npz
-*.mp4
-*.avi
-outputs/*.jpg
-outputs/*.png
-data/calib_images/*.jpg
-data/calib_images/*.png
-data/parts/*.jpg
-data/parts/*.png
+.DS_Store
