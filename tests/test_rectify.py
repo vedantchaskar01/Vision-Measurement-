@@ -12,8 +12,8 @@ def test_rectification():
     Tests that a known geometric transformation (homography) correctly
     preserves distances in millimeters.
     """
-    phys_w = 150.0
-    phys_h = 100.0
+    phys_w = 82.0
+    phys_h = 110.0
     px_per_mm = 10.0
     
     w_px = int(phys_w * px_per_mm)

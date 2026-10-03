@@ -29,8 +29,8 @@ class Rectifier:
         # Define the physical layout of the markers on the table in millimeters.
         # This MUST match where you physically place the markers.
         # Top-Left to Top-Right = width, Top-Left to Bottom-Left = height.
-        self.phys_width_mm = 150.0
-        self.phys_height_mm = 100.0
+        self.phys_width_mm = 82.0
+        self.phys_height_mm = 110.0
         
         # Setup ArUco detector (OpenCV 4.7+ API)
         dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
@@ -78,12 +78,12 @@ class Rectifier:
             return image, False
 
         # Define source points (pixel coordinates in the original image)
-        # We order them: Top-Left (0), Top-Right (1), Bottom-Right (2), Bottom-Left (3)
+        # We order them: Top-Left, Top-Right, Bottom-Right, Bottom-Left
         src_pts = np.array([
-            found_markers[0], # ID 0: Top-Left
-            found_markers[1], # ID 1: Top-Right
-            found_markers[2], # ID 2: Bottom-Right
-            found_markers[3]  # ID 3: Bottom-Left
+            found_markers[0], # Top-Left (ID 0)
+            found_markers[1], # Top-Right (ID 1)
+            found_markers[3], # Bottom-Right (ID 3)
+            found_markers[2]  # Bottom-Left (ID 2)
         ], dtype=np.float32)
 
         # Define destination points (where we WANT them to be in the final image)
