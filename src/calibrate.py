@@ -24,7 +24,7 @@ def main():
     parser.add_argument("--config", type=str, default="configs/config.yaml", help="Path to config file")
     parser.add_argument("--rows", type=int, default=6, help="Number of inner corners per chessboard row")
     parser.add_argument("--cols", type=int, default=9, help="Number of inner corners per chessboard column")
-    parser.add_argument("--size", type=float, default=25.0, help="Size of a chessboard square in mm")
+    parser.add_argument("--size", type=float, default=19.0, help="Size of a chessboard square in mm")
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
@@ -97,7 +97,10 @@ def main():
     mean_error = 0
     for i in range(len(objpoints)):
         imgpoints2, _ = cv2.projectPoints(objpoints[i], rvecs[i], tvecs[i], mtx, dist)
-        error = cv2.norm(imgpoints[i], imgpoints2, cv2.NORM_L2) / len(imgpoints2)
+        # Reshape to avoid OpenCV 5.0 type strictness (CV_32FC1 vs CV_32FC2)
+        pts1 = imgpoints[i].reshape(-1, 2)
+        pts2 = imgpoints2.reshape(-1, 2)
+        error = cv2.norm(pts1, pts2, cv2.NORM_L2) / len(imgpoints2)
         mean_error += error
 
     mean_error /= len(objpoints)
