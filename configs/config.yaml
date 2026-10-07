@@ -18,3 +18,9 @@ paths:
 
 # ArUco Marker IDs
 marker_ids: [0, 1, 2, 3]
+
+# Segmentation Settings
+thresh_method: "adaptive"
+adaptive_block_size: 301
+adaptive_c: 5
+min_area_px: 500

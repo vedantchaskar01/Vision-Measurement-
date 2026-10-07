@@ -67,7 +67,10 @@ class Segmenter:
             thresh_type = cv2.THRESH_BINARY
 
         if self.thresh_method.lower() == 'adaptive':
-            binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresh_type, 11, 2)
+            # Use a large block size (e.g. 51 or 101) so it doesn't break up solid objects
+            block_size = self.config.get('adaptive_block_size', 51)
+            c_val = self.config.get('adaptive_c', 5)
+            binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresh_type, block_size, c_val)
         else:
             _, binary = cv2.threshold(blurred, 0, 255, otsu_flag)
             
@@ -75,11 +78,15 @@ class Segmenter:
             cv2.imwrite(os.path.join(debug_dir, "04_threshold.jpg"), binary)
 
         # 5. Clean up the binary image (Morphology)
-        kernel = np.ones((3,3), np.uint8)
+        # Use a small kernel for opening (removing dust)
+        open_kernel = np.ones((3,3), np.uint8)
+        # Use a 5x5 kernel for closing (just enough to fix minor threshold noise, but small enough to NOT fill physical holes in parts)
+        close_kernel = np.ones((5,5), np.uint8)
+        
         # Opening removes small white noise outside the parts
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
-        # Closing fills in small black holes inside the white parts (not physical holes, just noise)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, open_kernel, iterations=1)
+        # Closing fills in small black holes inside the white parts (like shiny reflections)
+        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, close_kernel, iterations=1)
         
         if debug_dir:
             cv2.imwrite(os.path.join(debug_dir, "05_cleaned.jpg"), cleaned)
@@ -92,8 +99,21 @@ class Segmenter:
         
         if debug_dir:
             debug_img = image.copy()
-            # Just draw all found contours for debugging
-            cv2.drawContours(debug_img, contours, -1, (0, 255, 0), 2)
+            if hierarchy is not None:
+                h = hierarchy[0]
+                for i in range(len(contours)):
+                    area = cv2.contourArea(contours[i])
+                    if h[i][3] == -1:
+                        # Parent contour (outer boundary) -> Green
+                        if area >= self.min_area:
+                            cv2.drawContours(debug_img, contours, i, (0, 255, 0), 2)
+                    else:
+                        # Child contour (hole inside a part) -> Red
+                        # Only draw the hole if its parent is big enough (not dust)
+                        parent_idx = h[i][3]
+                        if cv2.contourArea(contours[parent_idx]) >= self.min_area:
+                            cv2.drawContours(debug_img, contours, i, (0, 0, 255), 2)
+                            
             cv2.imwrite(os.path.join(debug_dir, "06_contours.jpg"), debug_img)
 
         return contours, hierarchy
