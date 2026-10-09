@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vision Measurement Dashboard</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #38bdf8; margin-bottom: 2rem; font-weight: 300; letter-spacing: 1px; }
+        .dashboard { display: flex; gap: 2rem; width: 100%; max-width: 1400px; flex-wrap: wrap; }
+        .video-container { flex: 2; min-width: 600px; background: #1e293b; padding: 1rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .video-container img { width: 100%; border-radius: 8px; }
+        .stats-container { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 1rem; }
+        .card { background: #1e293b; padding: 1.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        .card h2 { margin-top: 0; font-size: 1.2rem; color: #94a3b8; }
+        .stat-value { font-size: 2.5rem; font-weight: bold; color: #f8fafc; }
+        .pass-text { color: #4ade80; }
+        .fail-text { color: #f87171; }
+        
+        .save-btn { background: #38bdf8; color: #0f172a; border: none; padding: 1rem; font-size: 1.1rem; font-weight: bold; border-radius: 8px; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 14px 0 rgba(56,189,248,0.39); }
+        .save-btn:hover { background: #0ea5e9; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(56,189,248,0.23); }
+        .save-btn:active { transform: translateY(0); }
+        
+        table { width: 100%; text-align: left; border-collapse: collapse; margin-top: 1rem; }
+        th, td { padding: 0.75rem; border-bottom: 1px solid #334155; }
+        th { color: #94a3b8; font-weight: normal; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px;}
+    </style>
+</head>
+<body>
+    <h1>Vision Measurement System</h1>
+    <div class="dashboard">
+        <div class="video-container">
+            <img src="/video_feed" alt="Live Video Feed">
+        </div>
+        <div class="stats-container">
+            <div class="card">
+                <h2>Total Parts Detected</h2>
+                <div class="stat-value" id="part-count">0</div>
+            </div>
+            
+            <button class="save-btn" onclick="saveData()">Save to CSV Spreadsheet 📥</button>
+            
+            <div class="card">
+                <h2>Live Data Stream</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Part</th>
+                            <th>Length</th>
+                            <th>Width</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="parts-table">
+                        <!-- Populated by JS -->
+                        <tr><td colspan="4" style="text-align:center; color:#64748b;">Waiting for parts...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function updateStats() {
+            try {
+                const response = await fetch('/api/results');
+                const data = await response.json();
+                
+                document.getElementById('part-count').innerText = data.length;
+                
+                const tableBody = document.getElementById('parts-table');
+                tableBody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#64748b;">No parts found in view.</td></tr>';
+                    return;
+                }
+
+                data.forEach(part => {
+                    const statusClass = part.passed ? 'pass-text' : 'fail-text';
+                    const statusText = part.passed ? 'PASS' : 'FAIL';
+                    
+                    const row = `<tr>
+                        <td>#${part.contour_idx}</td>
+                        <td>${part.length_mm.toFixed(1)} mm</td>
+                        <td>${part.width_mm.toFixed(1)} mm</td>
+                        <td class="${statusClass}"><strong>${statusText}</strong></td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
+            } catch (e) {
+                console.error("Error fetching stats:", e);
+            }
+        }
+
+        async function saveData() {
+            try {
+                const res = await fetch('/api/save', { method: 'POST' });
+                const result = await res.json();
+                
+                // Show a nice little animation on the button instead of annoying alert
+                const btn = document.querySelector('.save-btn');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = 'Saved Successfully! ✓';
+                btn.style.background = '#4ade80';
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.background = '#38bdf8';
+                }, 2000);
+                
+            } catch (e) {
+                alert("Failed to save.");
+            }
+        }
+
+        // Poll for updates every 250ms for a snappy UI
+        setInterval(updateStats, 250);
+    </script>
+</body>
+</html>
