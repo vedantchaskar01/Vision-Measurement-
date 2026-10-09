@@ -60,8 +60,9 @@ class Rectifier:
 
         # Find the centers of the markers we care about
         found_markers = {}
-        for i in range(len(ids)):
-            marker_id = ids[i][0]
+        ids_flat = np.array(ids).ravel()
+        for i in range(len(ids_flat)):
+            marker_id = ids_flat[i]
             if marker_id in self.marker_ids:
                 # Calculate center of this marker
                 c = corners[i][0]
