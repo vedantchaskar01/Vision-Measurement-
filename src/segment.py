@@ -1,33 +1,21 @@
 """
 Phase 3: Segmentation
 Takes a rectified top-down image and isolates the physical parts from the background.
-
-OpenCV functions used and WHY:
-- cv2.cvtColor: Converts the color image to grayscale. Color information is not needed to find edges and shapes, and processing 1 channel is faster and more reliable than 3.
-- cv2.createCLAHE: (Contrast Limited Adaptive Histogram Equalization) Evens out shadows or bright spots in the image so thresholding works more consistently across the whole table.
-- cv2.GaussianBlur: Blurs the image slightly to remove tiny specks of noise that might be detected as false edges.
-- cv2.threshold (with cv2.THRESH_OTSU): Automatically calculates the best cut-off value to separate dark pixels (parts) from light pixels (background), turning the image into pure black and white.
-- cv2.adaptiveThreshold: An alternative to Otsu that calculates different thresholds for small regions of the image, great for uneven lighting.
-- cv2.morphologyEx: Uses shape-based math to clean up the binary image. We use "Open" (remove small white noise) and "Close" (fill in small black holes inside parts).
-- cv2.findContours (with cv2.RETR_CCOMP): Traces the boundaries of the white blobs. RETR_CCOMP specifically organizes these boundaries into a 2-level hierarchy: outer borders of parts, and inner borders (holes inside parts).
-- cv2.drawContours: Draws the traced boundaries onto the original image for visual debugging.
 """
 
 import cv2
 import numpy as np
 import os
-import argparse
 import yaml
 
 class Segmenter:
     def __init__(self, config_path="configs/config.yaml"):
         with open(config_path, 'r') as f:
             self.config = yaml.safe_load(f)
-            
-        # Defaults for segmentation
-        self.min_area = self.config.get('min_area_px', 500) # Ignore tiny dust
+
+        self.min_area = self.config.get('min_area_px', 500)
         self.use_clahe = self.config.get('use_clahe', True)
-        self.thresh_method = self.config.get('thresh_method', 'otsu') # 'otsu' or 'adaptive'
+        self.thresh_method = self.config.get('thresh_method', 'otsu')
         self.dark_parts_on_light_bg = self.config.get('dark_parts', True)
 
     def segment(self, image, debug_dir=None):
@@ -39,82 +27,48 @@ class Segmenter:
         if debug_dir:
             os.makedirs(debug_dir, exist_ok=True)
 
-        # 1. Grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        if debug_dir:
-            cv2.imwrite(os.path.join(debug_dir, "01_gray.jpg"), gray)
-
-        # 2. Uneven Light Correction (Optional but recommended)
-        if self.use_clahe:
-            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            gray = clahe.apply(gray)
+        def save_debug(name, img):
             if debug_dir:
-                cv2.imwrite(os.path.join(debug_dir, "02_clahe.jpg"), gray)
+                cv2.imwrite(os.path.join(debug_dir, name), img)
 
-        # 3. Blur to remove noise
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        save_debug("01_gray.jpg", gray)
+
+        if self.use_clahe:
+            gray = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8)).apply(gray)
+            save_debug("02_clahe.jpg", gray)
+
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-        if debug_dir:
-            cv2.imwrite(os.path.join(debug_dir, "03_blurred.jpg"), blurred)
+        save_debug("03_blurred.jpg", blurred)
 
-        # 4. Thresholding (Binarization)
-        # We want the parts to be WHITE (255) and background BLACK (0) for finding contours.
-        if self.dark_parts_on_light_bg:
-            # If parts are dark, use INV to flip them to white
-            otsu_flag = cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU
-            thresh_type = cv2.THRESH_BINARY_INV
-        else:
-            otsu_flag = cv2.THRESH_BINARY | cv2.THRESH_OTSU
-            thresh_type = cv2.THRESH_BINARY
+        otsu_flag = cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU if self.dark_parts_on_light_bg else cv2.THRESH_BINARY | cv2.THRESH_OTSU
+        thresh_type = cv2.THRESH_BINARY_INV if self.dark_parts_on_light_bg else cv2.THRESH_BINARY
 
         if self.thresh_method.lower() == 'adaptive':
-            # Use a large block size (e.g. 51 or 101) so it doesn't break up solid objects
             block_size = self.config.get('adaptive_block_size', 51)
             c_val = self.config.get('adaptive_c', 5)
             binary = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresh_type, block_size, c_val)
         else:
             _, binary = cv2.threshold(blurred, 0, 255, otsu_flag)
-            
-        if debug_dir:
-            cv2.imwrite(os.path.join(debug_dir, "04_threshold.jpg"), binary)
 
-        # 5. Clean up the binary image (Morphology)
-        # Use a small kernel for opening (removing dust)
-        open_kernel = np.ones((3,3), np.uint8)
-        # Use a 5x5 kernel for closing (just enough to fix minor threshold noise, but small enough to NOT fill physical holes in parts)
-        close_kernel = np.ones((5,5), np.uint8)
-        
-        # Opening removes small white noise outside the parts
-        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, open_kernel, iterations=1)
-        # Closing fills in small black holes inside the white parts (like shiny reflections)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, close_kernel, iterations=1)
-        
-        if debug_dir:
-            cv2.imwrite(os.path.join(debug_dir, "05_cleaned.jpg"), cleaned)
+        save_debug("04_threshold.jpg", binary)
 
-        # 6. Find Contours
-        # RETR_CCOMP retrieves all contours and organizes them into a 2-level hierarchy.
-        # Top level are external boundaries of the components. 
-        # Second level are boundaries of the holes.
+        cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, np.ones((3,3), np.uint8))
+        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, np.ones((5,5), np.uint8))
+        save_debug("05_cleaned.jpg", cleaned)
+
         contours, hierarchy = cv2.findContours(cleaned, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
-        
-        if debug_dir:
+
+        if debug_dir and hierarchy is not None:
             debug_img = image.copy()
-            if hierarchy is not None:
-                h = hierarchy[0]
-                for i in range(len(contours)):
-                    area = cv2.contourArea(contours[i])
-                    if h[i][3] == -1:
-                        # Parent contour (outer boundary) -> Green
-                        if area >= self.min_area:
-                            cv2.drawContours(debug_img, contours, i, (0, 255, 0), 2)
-                    else:
-                        # Child contour (hole inside a part) -> Red
-                        # Only draw the hole if its parent is big enough (not dust)
-                        parent_idx = h[i][3]
-                        if cv2.contourArea(contours[parent_idx]) >= self.min_area:
-                            cv2.drawContours(debug_img, contours, i, (0, 0, 255), 2)
-                            
-            cv2.imwrite(os.path.join(debug_dir, "06_contours.jpg"), debug_img)
+            for i, cnt in enumerate(contours):
+                area = cv2.contourArea(cnt)
+                parent_idx = hierarchy[0][i][3]
+                if parent_idx == -1 and area >= self.min_area:
+                    cv2.drawContours(debug_img, contours, i, (0, 255, 0), 2)
+                elif parent_idx != -1 and cv2.contourArea(contours[parent_idx]) >= self.min_area:
+                    cv2.drawContours(debug_img, contours, i, (0, 0, 255), 2)
+            save_debug("06_contours.jpg", debug_img)
 
         return contours, hierarchy
 

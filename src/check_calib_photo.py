@@ -1,12 +1,6 @@
 """
 Phase 1: Calibration Photo Checker
 Quickly checks if a photo has a fully visible chessboard.
-
-OpenCV functions used and WHY:
-- cv2.imread: Loads the image from disk.
-- cv2.cvtColor: Converts to grayscale for corner detection.
-- cv2.findChessboardCorners: Returns a boolean (True/False) indicating if all requested inner corners were found.
-- cv2.drawChessboardCorners: Used to draw the found corners onto the image for visual verification.
 """
 import cv2
 import argparse
@@ -29,13 +23,13 @@ def main():
     if ret:
         print(f"SUCCESS: Found {args.cols}x{args.rows} chessboard in {args.image}!")
         cv2.drawChessboardCorners(img, (args.cols, args.rows), corners, ret)
-        
-        # Resize to fit on screen
+
+
         h, w = img.shape[:2]
         if w > 1200 or h > 800:
             scale = min(1200/w, 800/h)
             img = cv2.resize(img, (int(w*scale), int(h*scale)))
-            
+
         cv2.imshow("Detected Corners", img)
         cv2.waitKey(0)
         cv2.destroyAllWindows()

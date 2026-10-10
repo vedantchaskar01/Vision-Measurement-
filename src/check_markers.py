@@ -6,12 +6,10 @@ This helps you verify that your printed markers are IDs 0, 1, 2, 3.
 import cv2
 
 def main():
-    # Setup ArUco detector for DICT_4X4_50
     dictionary = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
     parameters = cv2.aruco.DetectorParameters()
     detector = cv2.aruco.ArucoDetector(dictionary, parameters)
 
-    # Try opening webcam (handling Windows DirectShow)
     cap = None
     for i in range(3):
         temp_cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
@@ -39,7 +37,6 @@ def main():
         corners, ids, rejected = detector.detectMarkers(gray)
 
         if ids is not None:
-            # Draw the borders and IDs of the markers
             cv2.aruco.drawDetectedMarkers(frame, corners, ids)
 
         cv2.imshow("Marker Checker (Press Q to quit)", frame)

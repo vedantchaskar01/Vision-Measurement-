@@ -2,7 +2,6 @@ import cv2
 import numpy as np
 import yaml
 import os
-import time
 import datetime
 import csv
 from flask import Flask, render_template, Response, jsonify
@@ -13,76 +12,70 @@ from measure import Measurer
 
 app = Flask(__name__, template_folder='../templates')
 
-# Initialize pipeline
 rectifier = Rectifier()
 segmenter = Segmenter()
 measurer = Measurer()
 
-# Load calib
 calib_data = np.load("outputs/calibration.npz")
 mtx = calib_data["mtx"]
 dist = calib_data["dist"]
 newcameramtx = None
 
-# Global state
 latest_results = []
 
 def generate_frames():
     global newcameramtx, latest_results
-    
+
     cap = None
     for i in range(3):
-        temp_cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-        if temp_cap.isOpened():
-            cap = temp_cap
-            break
-        temp_cap = cv2.VideoCapture(i)
-        if temp_cap.isOpened():
-            cap = temp_cap
+        for backend in [cv2.CAP_DSHOW, cv2.CAP_ANY]:
+            temp_cap = cv2.VideoCapture(i, backend)
+            if temp_cap.isOpened():
+                cap = temp_cap
+                break
+        if cap:
             break
 
     if cap is None:
         print("Error: Could not open webcam.")
         return
-        
+
     while True:
         success, frame = cap.read()
         if not success:
             break
-            
+
         if newcameramtx is None:
             h, w = frame.shape[:2]
             newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, (w, h), 1, (w, h))
-            
+
         undistorted = cv2.undistort(frame, mtx, dist, None, newcameramtx)
         warped, is_rectified = rectifier.rectify(undistorted)
-        
+
         display_frame = frame.copy()
-        
+
         if is_rectified:
             contours, hierarchy = segmenter.segment(warped)
             results = measurer.measure(contours, hierarchy, px_per_mm=rectifier.px_per_mm)
-            latest_results = results # Save for API
-            
+            latest_results = results
+
             display_frame = warped.copy()
             overlay = display_frame.copy()
-            
+
             for res in results:
                 rect = res["rect"]
-                box = cv2.boxPoints(rect)
-                box = np.int32(box)
-                
-                color = (0, 255, 0) if res["passed"] else (0, 0, 255)
-                
+                box = np.int32(cv2.boxPoints(rect))
+                color = (113, 204, 46) if res["passed"] else (60, 76, 231)
+
                 cv2.fillPoly(overlay, [box], color)
                 cv2.drawContours(display_frame, [box], 0, color, 2)
-                
-                center_x, center_y = int(rect[0][0]), int(rect[0][1])
-                dim_text = f"{res['length_mm']:.1f} x {res['width_mm']:.1f} mm"
-                cv2.putText(display_frame, dim_text, (center_x - 40, center_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
-                status_text = "PASS" if res["passed"] else "FAIL"
-                cv2.putText(display_frame, status_text, (center_x - 20, center_y - 20), cv2.FONT_HERSHEY_DUPLEX, 0.7, color, 2)
-            
+
+                cx, cy = int(rect[0][0]), int(rect[0][1])
+                cv2.putText(display_frame, f"{res['length_mm']:.1f} x {res['width_mm']:.1f} mm", 
+                            (cx - 40, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
+                cv2.putText(display_frame, "PASS" if res["passed"] else "FAIL", 
+                            (cx - 20, cy - 20), cv2.FONT_HERSHEY_DUPLEX, 0.7, color, 2)
+
             alpha = 0.3
             cv2.addWeighted(overlay, alpha, display_frame, 1 - alpha, 0, display_frame)
 
@@ -101,12 +94,10 @@ def video_feed():
 
 @app.route('/api/results')
 def get_results():
-    # Return JSON representation for the web UI dashboard
-    # Need to convert numpy arrays/tuples to pure python objects for JSON
     safe_results = []
     for r in latest_results:
         safe_r = r.copy()
-        safe_r["rect"] = None # Remove the OpenCV rect tuple, we don't need it in frontend
+        safe_r["rect"] = None
         safe_results.append(safe_r)
     return jsonify(safe_results)
 
@@ -115,18 +106,17 @@ def save_data():
     os.makedirs("outputs", exist_ok=True)
     csv_path = "outputs/measurements.csv"
     write_header = not os.path.exists(csv_path)
-    
+
     with open(csv_path, mode='a', newline='') as file:
         writer = csv.writer(file)
         if write_header:
             writer.writerow(["Timestamp", "Part_Index", "Length_mm", "Width_mm", "Hole_Count", "Status"])
-        
+
         dt_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for res in latest_results:
-            status = "PASS" if res["passed"] else "FAIL"
-            writer.writerow([dt_str, res["contour_idx"], round(res["length_mm"], 2), 
-                             round(res["width_mm"], 2), len(res["holes"]), status])
-                             
+            writer.writerow([dt_str, res["contour_idx"], round(res["length_mm"], 2),
+                             round(res["width_mm"], 2), len(res["holes"]), "PASS" if res["passed"] else "FAIL"])
+
     return jsonify({"status": "success", "message": "Saved to CSV in outputs/measurements.csv!"})
 
 if __name__ == '__main__':
